@@ -1,3 +1,22 @@
+# ------------------------
+# Tải audio từ URL vào thư mục audios
+# ------------------------
+def download_audio_file(audio_url, file_name):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    audios_folder = "audios"
+    if not os.path.exists(audios_folder):
+        os.makedirs(audios_folder)
+    file_path = os.path.join(audios_folder, file_name)
+    try:
+        resp = requests.get(audio_url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        with open(file_path, "wb") as f:
+            f.write(resp.content)
+        print(f"✅ Downloaded: {file_path}")
+        return file_path
+    except Exception as e:
+        print(f"❌ Error downloading audio: {e}")
+        return ""
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -22,12 +41,46 @@ def get_ipa_and_pos_cambridge(word):
         soup = BeautifulSoup(resp.text, "html.parser")
 
         ipa_span = soup.find("span", class_="ipa")
-        ipa_text = f"/{ipa_span.text.strip()}/" if ipa_span else "(không tìm thấy IPA)"
+        ipa_text = f"/{ipa_span.text.strip()}/" if ipa_span else None
 
         pos_span = soup.find("span", class_="pos dpos")
-        pos_text = pos_span.text.strip().lower() if pos_span else "khác"
+        pos_text = pos_span.text.strip().lower() if pos_span else None
 
-        # Dịch loại từ sang tiếng Việt
+        # Find all audio sources for US English
+        audio_url = None
+        audio_sources = soup.find_all("source", attrs={"type": "audio/mpeg"})
+        if audio_sources:
+            # Try to find the source whose src contains the phrase (no spaces, lowercase)
+            word_key = word.replace(" ", "").lower()
+            for src_tag in audio_sources:
+                src_val = src_tag.get("src", "")
+                if word_key in src_val.replace("/us/media/english/us_pron/", "").replace(".mp3", "").replace("/", "").lower():
+                    audio_url = src_val
+                    break
+            # If not found, just use the first
+            if not audio_url:
+                audio_url = audio_sources[0].get("src", "")
+        # Fallback: Try to find <audio> tag with <source type="audio/mpeg">
+        if not audio_url:
+            audio_section = soup.find("audio", class_="hdn")
+            if audio_section:
+                source_tag = audio_section.find("source", attrs={"type": "audio/mpeg"})
+                if source_tag and source_tag.has_attr("src"):
+                    audio_url = source_tag["src"]
+        # Fallback: Try to find <span class="audio_play_button">
+        if not audio_url:
+            audio_tag = soup.find("span", class_="audio_play_button")
+            if audio_tag and audio_tag.has_attr("data-src-mp3"):
+                audio_url = audio_tag["data-src-mp3"]
+
+        # Fix relative audio URLs
+        if audio_url and audio_url.startswith("/"):
+            audio_url = "https://dictionary.cambridge.org" + audio_url
+
+        audio_file = ""
+        if audio_url:
+            audio_file = download_audio_file(audio_url, f"{word.replace(' ', '_')}.mp3")
+
         pos_map = {
             "noun": "(n)",
             "verb": "(v)",
@@ -39,12 +92,30 @@ def get_ipa_and_pos_cambridge(word):
             "determiner": "(det)",
             "exclamation": "(excl)"
         }
-        vi_pos = pos_map.get(pos_text, "(khác)")
 
-        return ipa_text, vi_pos
+        # For phrases: if IPA is missing or looks like only one word, use IPA from each word instead
+        if " " in word:
+            phrase_word_count = len(word.split())
+            ipa_word_count = len(re.findall(r"/[^/]+/", ipa_text)) if ipa_text else 0
+            if not ipa_text or ipa_word_count < phrase_word_count:
+                words = word.split()
+                ipa_list = []
+                pos_list = []
+                audio_list = []
+                for w in words:
+                    ipa, pos, audio = get_ipa_and_pos_cambridge(w)
+                    ipa_list.append(ipa)
+                    pos_list.append(pos)
+                    audio_list.append(audio)
+                merged_ipa = " ".join(ipa_list)
+                merged_pos = ", ".join(sorted(set(pos_list)))
+                merged_audio = ";".join([a for a in audio_list if a])
+                return merged_ipa, merged_pos, merged_audio
+        vi_pos = pos_map.get(pos_text, "(khác)") if pos_text else "(khác)"
+        return ipa_text if ipa_text else "(không tìm thấy IPA)", vi_pos, audio_file
     except Exception as e:
         print(f"[❌ IPA/POS] {word}: {e}")
-        return "(lỗi IPA)", "khác"
+        return "(lỗi IPA)", "khác", ""
 
 # ------------------------
 # Dịch nghĩa tiếng Việt
@@ -102,14 +173,15 @@ def option1_generate_excel(input_txt, output_excel):
     words = read_unique_words_from_text(input_txt)
     data = []
     for word in words:
-        ipa, pos = get_ipa_and_pos_cambridge(word)
+        ipa, pos, audio = get_ipa_and_pos_cambridge(word)
         vi = translate_to_vietnamese(word)
-        print(f"{word:<15} | {ipa:<18} | {pos:<10} | {vi}")
+        print(f"{word:<15} | {ipa:<18} | {pos:<10} | {vi} | {audio}")
         data.append({
             'word': word,
             'pos': pos,
             'ipa': ipa,
-            'tiếng Việt': vi
+            'tiếng Việt': vi,
+            'audio': audio
         })
     pd.DataFrame(data).to_excel(output_excel, index=False, engine='openpyxl')
     print(f"✅ Đã tạo file Excel: {output_excel}")
@@ -165,30 +237,38 @@ def option3_copy_images_to_anki():
         print("⚠️ Không tìm thấy thư mục collection.media.")
         return
 
+    # Copy images
     if not os.path.exists(IMAGES_FOLDER):
         print("⚠️ Thư mục ảnh chưa tồn tại. Hãy chạy Option 2 trước.")
-        return
+    else:
+        for img_file in os.listdir(IMAGES_FOLDER):
+            src = os.path.join(IMAGES_FOLDER, img_file)
+            dst = os.path.join(media_path, img_file)
+            shutil.copy2(src, dst)
+            print(f"📂 Copy {img_file} -> {media_path}")
+        print("✅ Đã copy toàn bộ ảnh vào collection.media.")
 
-    for img_file in os.listdir(IMAGES_FOLDER):
-        src = os.path.join(IMAGES_FOLDER, img_file)
-        dst = os.path.join(media_path, img_file)
-        shutil.copy2(src, dst)
-        print(f"📂 Copy {img_file} -> {media_path}")
-
-    print("✅ Đã copy toàn bộ ảnh vào collection.media.")
+    # Copy audio files
+    audio_files = [f for f in os.listdir('.') if f.endswith('.mp3')]
+    if audio_files:
+        for audio_file in audio_files:
+            src = os.path.join('.', audio_file)
+            dst = os.path.join(media_path, audio_file)
+            shutil.copy2(src, dst)
+            print(f"🔊 Copy {audio_file} -> {media_path}")
+        print("✅ Đã copy toàn bộ audio vào collection.media.")
+    else:
+        print("⚠️ Không tìm thấy file audio (.mp3) trong thư mục hiện tại.")
 
 # ------------------------
 if __name__ == "__main__":
     while True:
-        mode = input("Chọn chế độ (1: Tạo Excel, 2: Tải ảnh & CSV Anki, 3: Copy ảnh vào Anki, 4: Thoát): ").strip()
+        mode = input("Chọn chế độ (1: Tạo Excel, 2: Tải ảnh & CSV Anki, 3: Copy ảnh/audio vào Anki").strip()
         if mode == "1":
             option1_generate_excel("input.txt", "output.xlsx")
         elif mode == "2":
             option2_add_images("output.xlsx", "output_with_images.csv")
         elif mode == "3":
             option3_copy_images_to_anki()
-        elif mode == "4":
-            print("👋 Đã thoát chương trình.")
-            break
         else:
             print("❌ Lựa chọn không hợp lệ!")

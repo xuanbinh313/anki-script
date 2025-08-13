@@ -17,6 +17,7 @@ def download_audio_file(audio_url, file_name):
     except Exception as e:
         print(f"❌ Error downloading audio: {e}")
         return ""
+
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -25,12 +26,16 @@ import pandas as pd
 import os
 import shutil
 from pathlib import Path
+from dotenv import load_dotenv
 
-# ====== Config ======
-UNSPLASH_ACCESS_KEY = "DzW_NqMUMjX98oo3Ua1lq6AhPaR7G9GF2yyBgAD-XxM"  # <-- API key Unsplash
-ANKI_BASE_FOLDER = r"C:\Users\THU PHAN\AppData\Roaming\Anki2"  # <-- Thay đúng đường dẫn gốc Anki
-# ANKI_BASE_FOLDER = os.path.expanduser("~/Library/Application Support/Anki2")
-IMAGES_FOLDER = "images"  # Thư mục lưu ảnh trước khi copy
+load_dotenv()
+
+
+# ====== Config from .env ======
+UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
+ANKI_BASE_FOLDER = os.getenv("ANKI_BASE_FOLDER")
+IMAGES_FOLDER = os.getenv("IMAGES_FOLDER", "images")
+AUDIOS_FOLDER = os.getenv("AUDIOS_FOLDER", "audios")
 
 # ------------------------
 def get_ipa_and_pos_cambridge(word):

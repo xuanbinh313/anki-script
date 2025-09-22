@@ -2,21 +2,8 @@
 # Tải audio từ URL vào thư mục audios
 # ------------------------
 def download_audio_file(audio_url, file_name):
-    headers = {"User-Agent": "Mozilla/5.0"}
-    audios_folder = "audios"
-    if not os.path.exists(audios_folder):
-        os.makedirs(audios_folder)
-    file_path = os.path.join(audios_folder, file_name)
-    try:
-        resp = requests.get(audio_url, headers=headers, timeout=10)
-        resp.raise_for_status()
-        with open(file_path, "wb") as f:
-            f.write(resp.content)
-        print(f"✅ Downloaded: {file_path}")
-        return file_path
-    except Exception as e:
-        print(f"❌ Error downloading audio: {e}")
-        return ""
+    # Deprecated: use gtts for audio generation
+    pass
 
 import re
 import requests
@@ -51,40 +38,19 @@ def get_ipa_and_pos_cambridge(word):
         pos_span = soup.find("span", class_="pos dpos")
         pos_text = pos_span.text.strip().lower() if pos_span else None
 
-        # Find all audio sources for US English
-        audio_url = None
-        audio_sources = soup.find_all("source", attrs={"type": "audio/mpeg"})
-        if audio_sources:
-            # Try to find the source whose src contains the phrase (no spaces, lowercase)
-            word_key = word.replace(" ", "").lower()
-            for src_tag in audio_sources:
-                src_val = src_tag.get("src", "")
-                if word_key in src_val.replace("/us/media/english/us_pron/", "").replace(".mp3", "").replace("/", "").lower():
-                    audio_url = src_val
-                    break
-            # If not found, just use the first
-            if not audio_url:
-                audio_url = audio_sources[0].get("src", "")
-        # Fallback: Try to find <audio> tag with <source type="audio/mpeg">
-        if not audio_url:
-            audio_section = soup.find("audio", class_="hdn")
-            if audio_section:
-                source_tag = audio_section.find("source", attrs={"type": "audio/mpeg"})
-                if source_tag and source_tag.has_attr("src"):
-                    audio_url = source_tag["src"]
-        # Fallback: Try to find <span class="audio_play_button">
-        if not audio_url:
-            audio_tag = soup.find("span", class_="audio_play_button")
-            if audio_tag and audio_tag.has_attr("data-src-mp3"):
-                audio_url = audio_tag["data-src-mp3"]
-
-        # Fix relative audio URLs
-        if audio_url and audio_url.startswith("/"):
-            audio_url = "https://dictionary.cambridge.org" + audio_url
-
+        # Generate audio using gtts
         audio_file = ""
-        if audio_url:
-            audio_file = download_audio_file(audio_url, f"{word.replace(' ', '_')}.mp3")
+        try:
+            audios_folder = AUDIOS_FOLDER
+            if not os.path.exists(audios_folder):
+                os.makedirs(audios_folder)
+            audio_file = os.path.join(audios_folder, f"{word.replace(' ', '_')}.mp3")
+            from gtts import gTTS
+            tts = gTTS(text=word, lang='en')
+            tts.save(audio_file)
+        except Exception as e:
+            print(f"❌ Error generating audio with gtts: {e}")
+            audio_file = ""
 
         pos_map = {
             "noun": "(n)",
@@ -106,16 +72,14 @@ def get_ipa_and_pos_cambridge(word):
                 words = word.split()
                 ipa_list = []
                 pos_list = []
-                audio_list = []
                 for w in words:
-                    ipa, pos, audio = get_ipa_and_pos_cambridge(w)
+                    ipa, pos, _ = get_ipa_and_pos_cambridge(w)
                     ipa_list.append(ipa)
                     pos_list.append(pos)
-                    audio_list.append(audio)
                 merged_ipa = " ".join(ipa_list)
                 merged_pos = ", ".join(sorted(set(pos_list)))
-                merged_audio = ";".join([a for a in audio_list if a])
-                return merged_ipa, merged_pos, merged_audio
+                # Always use phrase audio (gtts) for phrases
+                return merged_ipa, merged_pos, audio_file
         vi_pos = pos_map.get(pos_text, "(khác)") if pos_text else "(khác)"
         return ipa_text if ipa_text else "(không tìm thấy IPA)", vi_pos, audio_file
     except Exception as e:
@@ -196,19 +160,30 @@ def option1_generate_excel(input_txt, output_excel):
 # ------------------------
 def option2_add_images(input_excel, output_csv):
     df = pd.read_excel(input_excel, engine='openpyxl')
-    # img_files = []
     img_tags = []
+    audio_tags = []
 
-    for word in df['word']:
+    for idx, row in df.iterrows():
+        word = row['word']
         img_file = download_unsplash_image(word)
-        # img_files.append(img_file)
         if img_file:
             img_tags.append(f'<img src="{img_file}">')
         else:
             img_tags.append("")
+        audio_file = row.get('audio', "")
+        if audio_file and isinstance(audio_file, str) and audio_file.strip():
+            audio_tags.append(f'[sound:{os.path.basename(audio_file)}]')
+        else:
+            audio_tags.append("")
 
-    # df['image_file'] = img_files
     df['image_html'] = img_tags
+    df['audio'] = audio_tags
+
+    # Ensure 'audio' is the last column
+    cols = list(df.columns)
+    if 'audio' in cols:
+        cols = [c for c in cols if c != 'audio'] + ['audio']
+        df = df[cols]
 
     df.to_csv(output_csv, index=False, encoding='utf-8-sig', header=False)
     print(f"✅ CSV cho Anki: {output_csv}")

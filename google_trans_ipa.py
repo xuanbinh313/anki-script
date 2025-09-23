@@ -236,21 +236,22 @@ def option3_copy_images_to_anki():
         print("✅ Đã copy toàn bộ ảnh vào collection.media.")
 
     # Copy audio files
-    audio_files = [f for f in os.listdir('.') if f.endswith('.mp3')]
-    if audio_files:
-        for audio_file in audio_files:
-            src = os.path.join('.', audio_file)
+    
+    # Copy images
+    if not os.path.exists(AUDIOS_FOLDER):
+        print("⚠️ Thư mục audio chưa tồn tại. Hãy chạy Option 2 trước.")
+    else:
+        for audio_file in os.listdir(AUDIOS_FOLDER):
+            src = os.path.join(AUDIOS_FOLDER, audio_file)
             dst = os.path.join(media_path, audio_file)
             shutil.copy2(src, dst)
-            print(f"🔊 Copy {audio_file} -> {media_path}")
+            print(f"📂 Copy {audio_file} -> {media_path}")
         print("✅ Đã copy toàn bộ audio vào collection.media.")
-    else:
-        print("⚠️ Không tìm thấy file audio (.mp3) trong thư mục hiện tại.")
 
 # ------------------------
 if __name__ == "__main__":
     while True:
-        mode = input("Chọn chế độ (1: Tạo Excel, 2: Tải ảnh & CSV Anki, 3: Copy ảnh/audio vào Anki").strip()
+        mode = input("Chọn chế độ (1: Tạo Excel, 2: Tải ảnh & CSV Anki, 3: Copy ảnh/audio vào Anki ").strip()
         if mode == "1":
             option1_generate_excel("input.txt", "output.xlsx")
         elif mode == "2":

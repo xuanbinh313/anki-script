@@ -142,15 +142,14 @@ def option1_generate_excel(input_txt, output_excel):
     words = read_unique_words_from_text(input_txt)
     data = []
     for word in words:
-        ipa, pos, audio = get_ipa_and_pos_cambridge(word)
+        ipa, pos, _ = get_ipa_and_pos_cambridge(word)  # Do not generate audio here
         vi = translate_to_vietnamese(word)
-        print(f"{word:<15} | {ipa:<18} | {pos:<10} | {vi} | {audio}")
+        print(f"{word:<15} | {ipa:<18} | {pos:<10} | {vi}")
         data.append({
             'word': word,
             'pos': pos,
             'ipa': ipa,
-            'tiếng Việt': vi,
-            'audio': audio
+            'tiếng Việt': vi
         })
     pd.DataFrame(data).to_excel(output_excel, index=False, engine='openpyxl')
     print(f"✅ Đã tạo file Excel: {output_excel}")
@@ -170,10 +169,18 @@ def option2_add_images(input_excel, output_csv):
             img_tags.append(f'<img src="{img_file}">')
         else:
             img_tags.append("")
-        audio_file = row.get('audio', "")
-        if audio_file and isinstance(audio_file, str) and audio_file.strip():
+        # Generate audio here using gtts
+        try:
+            audios_folder = AUDIOS_FOLDER
+            if not os.path.exists(audios_folder):
+                os.makedirs(audios_folder)
+            audio_file = os.path.join(audios_folder, f"{word.replace(' ', '_')}.mp3")
+            from gtts import gTTS
+            tts = gTTS(text=word, lang='en')
+            tts.save(audio_file)
             audio_tags.append(f'[sound:{os.path.basename(audio_file)}]')
-        else:
+        except Exception as e:
+            print(f"❌ Error generating audio with gtts: {e}")
             audio_tags.append("")
 
     df['image_html'] = img_tags

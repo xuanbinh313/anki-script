@@ -2,8 +2,10 @@ beautifulsoup4==4.13.4
 bs4==0.0.2
 certifi==2025.8.3
 charset-normalizer==3.4.3
+click==8.1.8
 deep-translator==1.11.4
 et_xmlfile==2.0.0
+gTTS==2.5.4
 idna==3.10
 numpy==2.0.2
 openpyxl==3.1.5

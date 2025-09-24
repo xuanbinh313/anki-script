@@ -1,10 +1,3 @@
-# ------------------------
-# Tải audio từ URL vào thư mục audios
-# ------------------------
-def download_audio_file(audio_url, file_name):
-    # Deprecated: use gtts for audio generation
-    pass
-
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -138,7 +131,7 @@ def read_unique_words_from_text(file_path):
 # ------------------------
 # Xử lý toàn bộ từ và xuất Excel
 # ------------------------
-def option1_generate_excel(input_txt, output_excel):
+def option1_generate_words_per_space(input_txt, output_excel):
     words = read_unique_words_from_text(input_txt)
     data = []
     for word in words:
@@ -153,11 +146,29 @@ def option1_generate_excel(input_txt, output_excel):
         })
     pd.DataFrame(data).to_excel(output_excel, index=False, engine='openpyxl')
     print(f"✅ Đã tạo file Excel: {output_excel}")
-
 # ------------------------
-# Option 2: Đọc Excel, tải ảnh, xuất CSV cho Anki
+# Xử lý từng dòng và xuất Excel (mỗi dòng là 1 từ/cụm từ)
 # ------------------------
-def option2_add_images(input_excel, output_csv):
+def option2_generate_words_per_line(input_txt, output_excel):
+    with open(input_txt, 'r', encoding='utf-8') as f:
+        lines = [line.strip() for line in f if line.strip()]
+    data = []
+    for word in lines:
+        ipa, pos, _ = get_ipa_and_pos_cambridge(word)
+        vi = translate_to_vietnamese(word)
+        print(f"{word:<15} | {ipa:<18} | {pos:<10} | {vi}")
+        data.append({
+            'word': word,
+            'pos': pos,
+            'ipa': ipa,
+            'tiếng Việt': vi
+        })
+    pd.DataFrame(data).to_excel(output_excel, index=False, engine='openpyxl')
+    print(f"✅ Đã tạo file Excel: {output_excel}")
+# ------------------------
+# Option 3: Đọc Excel, tải ảnh, xuất CSV cho Anki
+# ------------------------
+def option3_add_images(input_excel, output_csv):
     df = pd.read_excel(input_excel, engine='openpyxl')
     img_tags = []
     audio_tags = []
@@ -192,12 +203,13 @@ def option2_add_images(input_excel, output_csv):
         cols = [c for c in cols if c != 'audio'] + ['audio']
         df = df[cols]
 
-    df.to_csv(output_csv, index=False, encoding='utf-8-sig', header=False)
+    import csv
+    df.to_csv(output_csv, index=False, encoding='utf-8-sig', header=False, sep='\t', quoting=csv.QUOTE_NONE, escapechar='\\')
     print(f"✅ CSV cho Anki: {output_csv}")
     print(f"📂 Ảnh đã lưu trong thư mục: {IMAGES_FOLDER}")
 
 # ------------------------
-def option3_copy_images_to_anki():
+def option4_copy_images_to_anki():
     anki_path = Path(os.path.expandvars(ANKI_BASE_FOLDER))
     if not anki_path.exists():
         print("⚠️ Đường dẫn Anki không tồn tại.")
@@ -251,12 +263,23 @@ def option3_copy_images_to_anki():
 # ------------------------
 if __name__ == "__main__":
     while True:
-        mode = input("Chọn chế độ (1: Tạo Excel, 2: Tải ảnh & CSV Anki, 3: Copy ảnh/audio vào Anki ").strip()
+        print("\nChọn chế độ:")
+        print("1: Lấy từ vựng từ đoạn văn")
+        print("2: Lấy từ vựng theo từng dòng")
+        print("3: Tải ảnh & CSV Anki")
+        print("4: Copy ảnh/audio vào Anki")
+        print("5: Thoát ứng dụng")
+        mode = input("Nhập số chế độ (1-5): ").strip()
         if mode == "1":
-            option1_generate_excel("input.txt", "output.xlsx")
+            option1_generate_words_per_space("input.txt", "output.xlsx")
         elif mode == "2":
-            option2_add_images("output.xlsx", "output_with_images.csv")
+            option2_generate_words_per_line("input.txt", "output.xlsx")
         elif mode == "3":
-            option3_copy_images_to_anki()
+            option3_add_images("output.xlsx", "output_with_images.csv")
+        elif mode == "4":
+            option4_copy_images_to_anki()
+        elif mode == "5":
+            print("👋 Đã thoát ứng dụng.")
+            break
         else:
             print("❌ Lựa chọn không hợp lệ!")

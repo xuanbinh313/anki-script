@@ -70,7 +70,7 @@ def get_ipa_and_pos_cambridge(word):
                     ipa_list.append(ipa)
                     pos_list.append(pos)
                 merged_ipa = " ".join(ipa_list)
-                merged_pos = ", ".join(sorted(set(pos_list)))
+                merged_pos = ", ".join(set(pos_list))
                 # Always use phrase audio (gtts) for phrases
                 return merged_ipa, merged_pos, audio_file
         vi_pos = pos_map.get(pos_text, "(khác)") if pos_text else "(khác)"
@@ -125,7 +125,7 @@ def read_unique_words_from_text(file_path):
         text = text.replace(f"'{p}'", "")  # xoá khỏi text gốc để không split tiếp
 
     words = re.findall(r'\b[a-zA-Z]+\b', text)  # các từ lẻ
-    all_terms = sorted(set(words + phrases))  # gộp & loại trùng
+    all_terms = set(words + phrases)  # gộp & loại trùng
     return all_terms
 
 # ------------------------
